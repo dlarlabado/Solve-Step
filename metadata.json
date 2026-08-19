@@ -1,0 +1,6 @@
+{
+  "name": "SolveStep",
+  "description": "Snap math and physics problems for instant concept breakdowns, step-by-step LaTeX solutions, and interactive practice problems powered by Gemini.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
