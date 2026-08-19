@@ -13,7 +13,6 @@ app.use(express.json({ limit: "50mb" }));
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-// Response Schema for structured step-by-step math solver
 const MathSolutionSchema = {
   type: Type.OBJECT,
   properties: {
@@ -50,11 +49,9 @@ const MathSolutionSchema = {
 app.post("/api/solve", async (req: Request, res: Response) => {
   try {
     const { image, prompt } = req.body;
-
     const parts: any[] = [];
 
     if (image) {
-      // Expecting base64 data string: "data:image/png;base64,..."
       const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
       const mimeType = image.match(/^data:(image\/\w+);base64,/)?.[1] || "image/png";
 
