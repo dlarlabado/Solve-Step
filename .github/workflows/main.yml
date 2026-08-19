@@ -1,0 +1,109 @@
+import express, { Request, Response } from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import { GoogleGenAI, Type } from "@google/genai";
+
+dotenv.config();
+
+const app = express();
+const port = process.env.PORT || 3001;
+
+app.use(cors());
+app.use(express.json({ limit: "50mb" }));
+
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+// Response Schema for structured step-by-step math solver
+const MathSolutionSchema = {
+  type: Type.OBJECT,
+  properties: {
+    problemStatement: {
+      type: Type.STRING,
+      description: "LaTeX formatted mathematical problem statement.",
+    },
+    topic: {
+      type: Type.STRING,
+      description: "Mathematical domain or topic (e.g., Calculus, Algebra).",
+    },
+    steps: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          stepNumber: { type: Type.INTEGER },
+          title: { type: Type.STRING },
+          explanation: { type: Type.STRING },
+          latex: { type: Type.STRING, description: "LaTeX formatted formula for this step." },
+        },
+        required: ["stepNumber", "title", "explanation", "latex"],
+      },
+      description: "Sequential breakdown of the problem solution.",
+    },
+    finalAnswer: {
+      type: Type.STRING,
+      description: "Final LaTeX formatted answer.",
+    },
+  },
+  required: ["problemStatement", "topic", "steps", "finalAnswer"],
+};
+
+app.post("/api/solve", async (req: Request, res: Response) => {
+  try {
+    const { image, prompt } = req.body;
+
+    const parts: any[] = [];
+
+    if (image) {
+      // Expecting base64 data string: "data:image/png;base64,..."
+      const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
+      const mimeType = image.match(/^data:(image\/\w+);base64,/)?.[1] || "image/png";
+
+      parts.push({
+        inlineData: {
+          data: base64Data,
+          mimeType: mimeType,
+        },
+      });
+    }
+
+    if (prompt) {
+      parts.push({
+        text: prompt,
+      });
+    }
+
+    if (parts.length === 0) {
+      return res.status(400).json({ error: "Please provide an image or text prompt." });
+    }
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [
+        {
+          role: "user",
+          parts: [
+            ...parts,
+            {
+              text: "Solve this math problem step-by-step. Provide all mathematical notation in clean LaTeX.",
+            },
+          ],
+        },
+      ],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: MathSolutionSchema,
+        temperature: 0.1,
+      },
+    });
+
+    const solutionData = JSON.parse(response.text || "{}");
+    return res.json(solutionData);
+  } catch (error: any) {
+    console.error("Solver Error:", error);
+    return res.status(500).json({ error: error.message || "Failed to solve problem" });
+  }
+});
+
+app.listen(port, () => {
+  console.log(`Solve-Step server running on port ${port}`);
+});
