@@ -1,106 +1,55 @@
-import express, { Request, Response } from "express";
-import cors from "cors";
-import dotenv from "dotenv";
-import { GoogleGenAI, Type } from "@google/genai";
+name: Build Android APK
 
-dotenv.config();
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
 
-const app = express();
-const port = process.env.PORT || 3001;
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-app.use(cors());
-app.use(express.json({ limit: "50mb" }));
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-const MathSolutionSchema = {
-  type: Type.OBJECT,
-  properties: {
-    problemStatement: {
-      type: Type.STRING,
-      description: "LaTeX formatted mathematical problem statement.",
-    },
-    topic: {
-      type: Type.STRING,
-      description: "Mathematical domain or topic (e.g., Calculus, Algebra).",
-    },
-    steps: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          stepNumber: { type: Type.INTEGER },
-          title: { type: Type.STRING },
-          explanation: { type: Type.STRING },
-          latex: { type: Type.STRING, description: "LaTeX formatted formula for this step." },
-        },
-        required: ["stepNumber", "title", "explanation", "latex"],
-      },
-      description: "Sequential breakdown of the problem solution.",
-    },
-    finalAnswer: {
-      type: Type.STRING,
-      description: "Final LaTeX formatted answer.",
-    },
-  },
-  required: ["problemStatement", "topic", "steps", "finalAnswer"],
-};
+      - name: Setup Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
 
-app.post("/api/solve", async (req: Request, res: Response) => {
-  try {
-    const { image, prompt } = req.body;
-    const parts: any[] = [];
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
-    if (image) {
-      const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
-      const mimeType = image.match(/^data:(image\/\w+);base64,/)?.[1] || "image/png";
+      - name: Install Dependencies
+        run: npm install
 
-      parts.push({
-        inlineData: {
-          data: base64Data,
-          mimeType: mimeType,
-        },
-      });
-    }
+      - name: Build Web Assets
+        run: npm run build
 
-    if (prompt) {
-      parts.push({
-        text: prompt,
-      });
-    }
+      - name: Sync Capacitor Android
+        run: npx cap sync android || echo "Capacitor sync skipped"
 
-    if (parts.length === 0) {
-      return res.status(400).json({ error: "Please provide an image or text prompt." });
-    }
+      - name: Build APK with Gradle
+        run: |
+          if [ -d "android" ]; then
+            cd android
+            chmod +x gradlew
+            ./gradlew assembleDebug --stacktrace
+          else
+            echo "No android folder found. Please ensure android project is added."
+          fi
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: [
-        {
-          role: "user",
-          parts: [
-            ...parts,
-            {
-              text: "Solve this math problem step-by-step. Provide all mathematical notation in clean LaTeX.",
-            },
-          ],
-        },
-      ],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: MathSolutionSchema,
-        temperature: 0.1,
-      },
-    });
-
-    const solutionData = JSON.parse(response.text || "{}");
-    return res.json(solutionData);
-  } catch (error: any) {
-    console.error("Solver Error:", error);
-    return res.status(500).json({ error: error.message || "Failed to solve problem" });
-  }
-});
-
-app.listen(port, () => {
-  console.log(`Solve-Step server running on port ${port}`);
-});
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
