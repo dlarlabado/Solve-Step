@@ -40,6 +40,9 @@ jobs:
 
       - name: Initialize and Sync Capacitor Android
         run: |
+          if [ ! -f "capacitor.config.json" ] && [ ! -f "capacitor.config.ts" ]; then
+            bunx --bun @capacitor/cli init "SolveStep" "com.solvestep.app" --web-dir "dist"
+          fi
           if [ ! -d "android" ]; then
             bunx --bun @capacitor/cli add android
           fi
