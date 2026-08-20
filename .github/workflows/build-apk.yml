@@ -31,14 +31,18 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          bun install --frozen-lockfile
+          bun install --frozen-lockfile || bun install
+          bun add @capacitor/core @capacitor/cli @capacitor/android
 
       - name: Build Web Assets
         run: |
           bun run build
 
-      - name: Sync Capacitor Android
+      - name: Initialize and Sync Capacitor Android
         run: |
+          if [ ! -d "android" ]; then
+            bunx --bun @capacitor/cli add android
+          fi
           bunx --bun @capacitor/cli sync android
 
       - name: Build Android Debug APK
